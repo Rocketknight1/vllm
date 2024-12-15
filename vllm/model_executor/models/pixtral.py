@@ -173,8 +173,6 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
             vllm_config=vllm_config,
             prefix=maybe_prefix(prefix, "language_model"))
 
-        breakpoint()
-
         self.vision_encoder = VisionTransformer(self.vision_args)
         self.vision_language_adapter = VisionLanguageAdapter(
             self.vision_args, dim=config.text_config.hidden_size)
@@ -205,8 +203,11 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         """
         print("Forward pass, input shape is ", input_ids.shape)
         if input_ids.shape[-1] > 256:
+            debug_mode = True
             torch.save(input_ids, "input_ids.pt")
             torch.save(kwargs["images"], "images.pt")
+        else:
+            debug_mode = False
         if intermediate_tensors is not None:
             input_ids = None
             inputs_embeds = None
@@ -221,7 +222,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
                 inputs_embeds = merge_multimodal_embeddings(
                     input_ids, inputs_embeds, vision_embeddings,
                     self.vision_args.image_token_id)
-                if input_ids.shape[-1] > 256:
+                if debug_mode:
                     torch.save(inputs_embeds, "inputs_embeds_post_merge.pt")
                     torch.save(vision_embeddings, "vision_embeddings.pt")
 
@@ -229,15 +230,14 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
             else:
                 inputs_embeds = None
 
-        breakpoint()
-
         hidden_states = self.language_model.model(input_ids,
                                                   positions,
                                                   kv_caches,
                                                   attn_metadata,
                                                   intermediate_tensors,
                                                   inputs_embeds=inputs_embeds)
-
+        if debug_mode:
+            torch.save(hidden_states, "language_model_out.pt")
         return hidden_states
 
     def _parse_and_validate_image_input(
@@ -276,6 +276,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[torch.Tensor]:
+        breakpoint()
         return self.language_model.compute_logits(hidden_states,
                                                   sampling_metadata)
 
@@ -284,6 +285,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         logits: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[SamplerOutput]:
+        breakpoint()
         return self.language_model.sample(logits, sampling_metadata)
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):

@@ -336,7 +336,7 @@ class LlamaModel(nn.Module):
             residual = intermediate_tensors["residual"]
 
         print("Language model handling input of shape", inputs_embeds.shape)
-        if inputs_embeds.shape[-2] > 256:
+        if inputs_embeds.shape[-2] == 4308:
             torch.save(inputs_embeds, "language_model_inputs_embeds.pt")
 
         for i in range(self.start_layer, self.end_layer):
@@ -344,7 +344,7 @@ class LlamaModel(nn.Module):
             hidden_states, residual = layer(positions, hidden_states,
                                             kv_caches[i - self.start_layer],
                                             attn_metadata, residual)
-            if inputs_embeds.shape[-2] > 256:
+            if inputs_embeds.shape[-2] == 4308:
                 torch.save(hidden_states, f"language_model_hidden_states_{i}.pt")
                 torch.save(residual, f"language_model_residual_{i}.pt")
 

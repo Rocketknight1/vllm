@@ -276,7 +276,11 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[torch.Tensor]:
-        breakpoint()
+        if hidden_states.shape[0] == 4308:
+            torch.save(hidden_states, "hidden_states_for_logits.pt")
+            logits = self.language_model.compute_logits(hidden_states, sampling_metadata)
+            torch.save(logits, "logits.pt")
+            exit()
         return self.language_model.compute_logits(hidden_states,
                                                   sampling_metadata)
 
@@ -285,7 +289,6 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         logits: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[SamplerOutput]:
-        breakpoint()
         return self.language_model.sample(logits, sampling_metadata)
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):

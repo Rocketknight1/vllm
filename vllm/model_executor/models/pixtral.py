@@ -173,6 +173,8 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
             vllm_config=vllm_config,
             prefix=maybe_prefix(prefix, "language_model"))
 
+        breakpoint()
+
         self.vision_encoder = VisionTransformer(self.vision_args)
         self.vision_language_adapter = VisionLanguageAdapter(
             self.vision_args, dim=config.text_config.hidden_size)

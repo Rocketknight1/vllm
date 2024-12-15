@@ -201,6 +201,9 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         TODO
 
         """
+        if input_ids.shape[-1] > 256:
+            torch.save(input_ids, "input_ids.pt")
+            torch.save(kwargs["images"], "images.pt")
         if intermediate_tensors is not None:
             input_ids = None
             inputs_embeds = None
@@ -215,10 +218,15 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
                 inputs_embeds = merge_multimodal_embeddings(
                     input_ids, inputs_embeds, vision_embeddings,
                     self.vision_args.image_token_id)
+                if input_ids.shape[-1] > 256:
+                    torch.save(inputs_embeds, "inputs_embeds_post_merge.pt")
+                    torch.save(vision_embeddings, "vision_embeddings.pt")
 
                 input_ids = None
             else:
                 inputs_embeds = None
+
+        breakpoint()
 
         hidden_states = self.language_model.model(input_ids,
                                                   positions,

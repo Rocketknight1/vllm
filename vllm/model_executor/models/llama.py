@@ -371,7 +371,7 @@ class LlamaModel(nn.Module):
 
         for i in range(self.start_layer, self.end_layer):
             layer = self.layers[i]
-            if i < 2:
+            if debug_mode and i < 2:
                 hidden_states, residual = layer(positions, hidden_states,
                                                 kv_caches[i - self.start_layer],
                                                 attn_metadata, residual, debug_layer=i)
@@ -592,10 +592,11 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         attn_metadata: AttentionMetadata,
         intermediate_tensors: Optional[IntermediateTensors] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        debug_mode=False,
     ) -> Union[torch.Tensor, IntermediateTensors]:
         model_output = self.model(input_ids, positions, kv_caches,
                                   attn_metadata, intermediate_tensors,
-                                  inputs_embeds)
+                                  inputs_embeds, debug_mode=debug_mode)
         return model_output
 
     def compute_logits(

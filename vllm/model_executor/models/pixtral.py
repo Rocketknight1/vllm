@@ -203,6 +203,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         """
         print("Forward pass, input shape is ", input_ids.shape)
         if input_ids.shape[-1] != 5600:
+            print("Saving debug tensors!")
             debug_mode = True
             torch.save(input_ids, "input_ids.pt")
             torch.save(kwargs["images"], "images.pt")
@@ -235,7 +236,8 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
                                                   kv_caches,
                                                   attn_metadata,
                                                   intermediate_tensors,
-                                                  inputs_embeds=inputs_embeds)
+                                                  inputs_embeds=inputs_embeds,
+                                                  debug_mode=debug_mode)
         if debug_mode:
             torch.save(hidden_states, "language_model_out.pt")
         return hidden_states

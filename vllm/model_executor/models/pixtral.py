@@ -215,7 +215,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
             image_input = self._parse_and_validate_image_input(**kwargs)
 
             if image_input is not None:
-                vision_embeddings = self._process_image_input(image_input)
+                vision_embeddings = self._process_image_input(image_input, debug_mode=debug_mode)
                 inputs_embeds = self.language_model.model.get_input_embeddings(
                     input_ids)
 
@@ -268,19 +268,14 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
         return images
 
     def _process_image_input(self,
-                             image_input: List[torch.Tensor]) -> torch.Tensor:
-        return self.vision_language_adapter(self.vision_encoder(image_input))
+                             image_input: List[torch.Tensor], debug_mode=False) -> torch.Tensor:
+        return self.vision_language_adapter(self.vision_encoder(image_input, debug_mode=debug_mode), debug_mode=debug_mode)
 
     def compute_logits(
         self,
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[torch.Tensor]:
-        if hidden_states.shape[0] == 4308:
-            torch.save(hidden_states, "hidden_states_for_logits.pt")
-            logits = self.language_model.compute_logits(hidden_states, sampling_metadata)
-            torch.save(logits, "logits.pt")
-            exit()
         return self.language_model.compute_logits(hidden_states,
                                                   sampling_metadata)
 
@@ -445,17 +440,30 @@ class Attention(nn.Module):
         x: torch.Tensor,
         mask: torch.Tensor,
         freqs_cis: torch.Tensor,
+        debug_layer=None,
     ) -> torch.Tensor:
         batch, patches, _ = x.shape
+        if debug_layer is not None:
+            torch.save(x, f"vision_layer_{debug_layer}_attention_in.pt")
 
         q, k, v = self.wq(x), self.wk(x), self.wv(x)
         q = q.reshape(batch, patches, self.n_heads, self.head_dim)
         k = k.reshape(batch, patches, self.n_heads, self.head_dim)
         v = v.reshape(batch, patches, self.n_heads, self.head_dim)
+        if debug_layer is not None:
+            torch.save(q, f"vision_layer_{debug_layer}_pre_rotary_emb_q.pt")
+            torch.save(k, f"vision_layer_{debug_layer}_pre_rotary_emb_k.pt")
+            torch.save(v, f"vision_layer_{debug_layer}_pre_rotary_emb_v.pt")
 
         q, k = apply_rotary_emb_vit(q, k, freqs_cis=freqs_cis)
+        if debug_layer is not None:
+            torch.save(q, f"vision_layer_{debug_layer}_post_rotary_emb_q.pt")
+            torch.save(k, f"vision_layer_{debug_layer}_post_rotary_emb_k.pt")
         out = xops.memory_efficient_attention(q, k, v, attn_bias=mask)
         out = out.reshape(batch, patches, self.n_heads * self.head_dim)
+        if debug_layer is not None:
+            torch.save(out, f"vision_layer_{debug_layer}_attention_out.pt")
+            torch.save(self.wo(out), f"vision_layer_{debug_layer}_attention_wo_out.pt")
         return self.wo(out)
 
 
@@ -473,13 +481,29 @@ class TransformerBlock(nn.Module):
         x: torch.Tensor,
         mask: torch.Tensor,
         freqs_cis: torch.Tensor,
+        debug_layer=None,
     ) -> torch.Tensor:
+        if debug_layer is not None:
+            torch.save(x, f"vision_layer_{debug_layer}_in.pt")
+            torch.save(self.attention_norm(x), f"vision_layer_{debug_layer}_pre_attention_norm.pt")
         r = self.attention.forward(self.attention_norm(x),
                                    mask=mask,
-                                   freqs_cis=freqs_cis)
+                                   freqs_cis=freqs_cis,
+                                   debug_layer=debug_layer)
+        if debug_layer is not None:
+            torch.save(r, f"vision_layer_{debug_layer}_attention_out.pt")
         h = x + r
+        if debug_layer:
+            torch.save(h, f"vision_layer_{debug_layer}_attention_out_plus_residual.pt")
+
+        if debug_layer is not None:
+            torch.save(self.ffn_norm(h), f"vision_layer_{debug_layer}_pre_ffn_norm.pt")
         r = self.feed_forward.forward(self.ffn_norm(h))
+        if debug_layer is not None:
+            torch.save(r, f"vision_layer_{debug_layer}_ffn_out.pt")
         out = h + r
+        if debug_layer is not None:
+            torch.save(out, f"vision_layer_{debug_layer}_ffn_out_plus_residual.pt")
         return out
 
 
@@ -496,9 +520,14 @@ class Transformer(nn.Module):
         x: torch.Tensor,
         mask: torch.Tensor,
         freqs_cis: Optional[torch.Tensor],
+        debug_mode=False,
     ) -> torch.Tensor:
-        for layer in self.layers:
-            x = layer(x, mask=mask, freqs_cis=freqs_cis)
+        for i, layer in enumerate(self.layers):
+            if debug_mode and i < 2:
+                x = layer(x, mask=mask, freqs_cis=freqs_cis, debug_layer=i)
+            else:
+                x = layer(x, mask=mask, freqs_cis=freqs_cis)
+            torch.save(x, f"vision_layer_{i}_out.pt")
         return x
 
 
@@ -565,6 +594,7 @@ class VisionTransformer(nn.Module):
     def forward(
         self,
         images: List[torch.Tensor],
+        debug_mode=False,
     ) -> torch.Tensor:
         """
         Args:
@@ -578,15 +608,21 @@ class VisionTransformer(nn.Module):
         patch_embeds_list = [
             self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in images
         ]
+        if debug_mode:
+            torch.save(patch_embeds_list, "patch_embeds_list.pt")
 
         # flatten to a single sequence
         patch_embeds = torch.cat(
             [p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
         patch_embeds = self.ln_pre(patch_embeds)
+        if debug_mode:
+            torch.save(patch_embeds, "patch_embeds.pt")
 
         # positional embeddings
         positions = position_meshgrid(patch_embeds_list).to(self.device)
         freqs_cis = self.freqs_cis[positions[:, 0], positions[:, 1]]
+        if debug_mode:
+            torch.save(freqs_cis, "freqs_cis.pt")
 
         # pass through Transformer with a block diagonal mask delimiting images
         if USE_XFORMERS_OPS:
@@ -595,7 +631,7 @@ class VisionTransformer(nn.Module):
         else:
             raise ImportError("Xformers is required for Pixtral inference "
                               "with the Mistral format")
-        out = self.transformer(patch_embeds, mask=mask, freqs_cis=freqs_cis)
+        out = self.transformer(patch_embeds, mask=mask, freqs_cis=freqs_cis, debug_mode=debug_mode)
 
         # remove batch dimension of the single sequence
         return out.squeeze(0)

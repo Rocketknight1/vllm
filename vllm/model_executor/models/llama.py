@@ -182,12 +182,23 @@ class LlamaAttention(nn.Module):
         hidden_states: torch.Tensor,
         kv_cache: torch.Tensor,
         attn_metadata: AttentionMetadata,
+        debug_layer=None,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        if debug_layer is not None:
+            torch.save(q, f"language_model_layer_{debug_layer}_q.pt")
+            torch.save(k, f"language_model_layer_{debug_layer}_k.pt")
+            torch.save(v, f"language_model_layer_{debug_layer}_v.pt")
         q, k = self.rotary_emb(positions, q, k)
+        if debug_layer is not None:
+            torch.save(q, f"language_model_layer_{debug_layer}_rotary_q.pt")
+            torch.save(k, f"language_model_layer_{debug_layer}_rotary_k.pt")
         attn_output = self.attn(q, k, v, kv_cache, attn_metadata)
         output, _ = self.o_proj(attn_output)
+        if debug_layer is not None:
+            torch.save(attn_output, f"language_model_layer_{debug_layer}_attn_output.pt")
+            torch.save(attn_output, f"language_model_layer_{debug_layer}_attn_final_output.pt")
         return output
 
 
@@ -248,23 +259,42 @@ class LlamaDecoderLayer(nn.Module):
         kv_cache: torch.Tensor,
         attn_metadata: AttentionMetadata,
         residual: Optional[torch.Tensor],
+        debug_layer=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
+            if debug_layer is not None:
+                torch.save(residual, f"language_model_layer_{debug_layer}_input.pt")
+                torch.save(hidden_states, f"language_model_layer_{debug_layer}_ln.pt")
         else:
+            if debug_layer is not None:
+                torch.save(residual, f"language_model_layer_{debug_layer}_residual_in.pt")
+                torch.save(hidden_states, f"language_model_layer_{debug_layer}_hidden_states_in.pt")
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
+            if debug_layer is not None:
+                torch.save(residual, f"language_model_layer_{debug_layer}_ln_residual_out.pt")
+                torch.save(hidden_states, f"language_model_layer_{debug_layer}_ln.pt")
         hidden_states = self.self_attn(positions=positions,
                                        hidden_states=hidden_states,
                                        kv_cache=kv_cache,
-                                       attn_metadata=attn_metadata)
+                                       attn_metadata=attn_metadata,
+                                       debug_layer=debug_layer)
+        if debug_layer is not None:
+            torch.save(hidden_states, f"language_model_layer_{debug_layer}_attention_out.pt")
+
 
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
             hidden_states, residual)
+        if debug_layer is not None:
+            torch.save(residual, f"language_model_layer_{debug_layer}_post_attention_ln_residual_out.pt")
+            torch.save(hidden_states, f"language_model_layer_{debug_layer}_post_attention_ln.pt")
         hidden_states = self.mlp(hidden_states)
+        if debug_layer is not None:
+            torch.save(hidden_states, f"language_model_layer_{debug_layer}_mlp_out.pt")
         return hidden_states, residual
 
 
@@ -323,6 +353,7 @@ class LlamaModel(nn.Module):
         attn_metadata: AttentionMetadata,
         intermediate_tensors: Optional[IntermediateTensors],
         inputs_embeds: Optional[torch.Tensor] = None,
+        debug_mode=False,
     ) -> Union[torch.Tensor, IntermediateTensors]:
         if get_pp_group().is_first_rank:
             if inputs_embeds is not None:
@@ -335,16 +366,20 @@ class LlamaModel(nn.Module):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
-        print("Language model handling input of shape", inputs_embeds.shape)
-        if inputs_embeds.shape[-2] == 4308:
+        if debug_mode:
             torch.save(inputs_embeds, "language_model_inputs_embeds.pt")
 
         for i in range(self.start_layer, self.end_layer):
             layer = self.layers[i]
-            hidden_states, residual = layer(positions, hidden_states,
-                                            kv_caches[i - self.start_layer],
-                                            attn_metadata, residual)
-            if inputs_embeds.shape[-2] == 4308:
+            if i < 2:
+                hidden_states, residual = layer(positions, hidden_states,
+                                                kv_caches[i - self.start_layer],
+                                                attn_metadata, residual, debug_layer=i)
+            else:
+                hidden_states, residual = layer(positions, hidden_states,
+                                                kv_caches[i - self.start_layer],
+                                                attn_metadata, residual)
+            if debug_mode:
                 torch.save(hidden_states, f"language_model_hidden_states_{i}.pt")
                 torch.save(residual, f"language_model_residual_{i}.pt")
 

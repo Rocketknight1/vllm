@@ -202,7 +202,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
 
         """
         print("Forward pass, input shape is ", input_ids.shape)
-        if input_ids.shape[-1] > 256:
+        if input_ids.shape[-1] != 5600:
             debug_mode = True
             torch.save(input_ids, "input_ids.pt")
             torch.save(kwargs["images"], "images.pt")

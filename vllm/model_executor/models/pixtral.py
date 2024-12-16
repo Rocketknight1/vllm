@@ -650,7 +650,12 @@ class VisionLanguageAdapter(nn.Module):
         self.gelu = nn.GELU()
         self.w_out = nn.Linear(dim, dim, bias=True)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, debug_mode=False) -> torch.Tensor:
+        if debug_mode:
+            torch.save(x, "vision_language_adapter_in.pt")
+            torch.save(self.w_in(x), "vision_language_adapter_w_in.pt")
+            torch.save(self.gelu(self.w_in(x)), "vision_language_adapter_gelu.pt")
+            torch.save(self.w_out(self.gelu(self.w_in(x))), "vision_language_adapter_w_out.pt")
         return self.w_out(self.gelu(self.w_in(x)))
 
 

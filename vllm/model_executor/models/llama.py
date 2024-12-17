@@ -249,6 +249,7 @@ class LlamaDecoderLayer(nn.Module):
         )
         self.input_layernorm = RMSNorm(config.hidden_size,
                                        eps=config.rms_norm_eps)
+        breakpoint()
         self.post_attention_layernorm = RMSNorm(config.hidden_size,
                                                 eps=config.rms_norm_eps)
 

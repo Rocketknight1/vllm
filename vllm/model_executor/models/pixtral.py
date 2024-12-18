@@ -231,6 +231,7 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
             else:
                 inputs_embeds = None
 
+        exit()
         hidden_states = self.language_model.model(input_ids,
                                                   positions,
                                                   kv_caches,
@@ -492,8 +493,6 @@ class TransformerBlock(nn.Module):
                                    mask=mask,
                                    freqs_cis=freqs_cis,
                                    debug_layer=debug_layer)
-        if debug_layer is not None:
-            torch.save(r, f"vision_layer_{debug_layer}_attention_out.pt")
         h = x + r
         if debug_layer:
             torch.save(h, f"vision_layer_{debug_layer}_attention_out_plus_residual.pt")

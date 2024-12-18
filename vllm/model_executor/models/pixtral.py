@@ -495,8 +495,9 @@ class TransformerBlock(nn.Module):
                                    freqs_cis=freqs_cis,
                                    debug_layer=debug_layer)
         h = x + r
-        if debug_layer:
+        if debug_layer is not None:
             torch.save(h, f"vision_layer_{debug_layer}_attention_out_plus_residual.pt")
+            exit()
 
         if debug_layer is not None:
             torch.save(self.ffn_norm(h), f"vision_layer_{debug_layer}_pre_ffn_norm.pt")

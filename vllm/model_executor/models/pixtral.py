@@ -530,7 +530,8 @@ class Transformer(nn.Module):
                 x = layer(x, mask=mask, freqs_cis=freqs_cis, debug_layer=i)
             else:
                 x = layer(x, mask=mask, freqs_cis=freqs_cis)
-            torch.save(x, f"vision_layer_{i}_out.pt")
+            if debug_mode:
+                torch.save(x, f"vision_layer_{i}_out.pt")
         return x
 
 

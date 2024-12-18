@@ -230,8 +230,9 @@ class PixtralForConditionalGeneration(nn.Module, SupportsMultiModal,
                 input_ids = None
             else:
                 inputs_embeds = None
+        if debug_mode:
+            exit()
 
-        exit()
         hidden_states = self.language_model.model(input_ids,
                                                   positions,
                                                   kv_caches,
